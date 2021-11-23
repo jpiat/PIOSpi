@@ -151,7 +151,34 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
     DEBUGSPI("SPI::transfer completed\n");
 }
 
-void PioSPI::beginTransaction(void) {
+void PioSPI::beginTransaction(SPISettings settings) {
+    if(!_initted){
+        uint32_t system_clock_frequency = clock_get_hz(clk_sys);
+        _clkdiv = ((float) system_clock_frequency)/((float) settings.getClockFreq() * 4);  // 25MHz
+        _BITORDER = settings.getBitOrder() ;
+        _CPHA = (settings.getDataMode() == SPI_MODE1) || (settings.getDataMode() == SPI_MODE3);
+        _CPOL = (settings.getDataMode() == SPI_MODE2) || (settings.getDataMode() == SPI_MODE3);
+        uint cpha = _CPHA ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
+        gpio_init(_CS);
+        gpio_put(_CS, 1);
+        gpio_set_dir(_CS, GPIO_OUT);
+        pio_spi_init(_spi.pio, 
+                    _spi.sm,
+                    cpha ,
+                    8,       // 8 bits per SPI frame
+                    _clkdiv,
+                    cpha,
+                    _CPOL,
+                    _SCK,
+                    _TX,
+                    _RX);
+        _running = true ;
+        _initted = true ;
+    }
+    //TODO: take settings into account
+    
+    //TODO: take mode into account
+    //TODO: take clk into account
     gpio_put(_CS, 0);
 }
 
@@ -196,21 +223,9 @@ bool PioSPI::setTX(pin_size_t pin) {
 }
 
 void PioSPI::begin() {
-    uint cpha = _CPHA ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
     gpio_init(_CS);
     gpio_put(_CS, 1);
     gpio_set_dir(_CS, GPIO_OUT);
-    pio_spi_init(_spi.pio, _spi.sm,
-                         cpha ,
-                         8,       // 8 bits per SPI frame
-                         _clkdiv,
-                         cpha,
-                         _CPOL,
-                         _SCK,
-                         _TX,
-                         _RX);
-    _running = true ;
-    _initted = true ;
 }
 
 void PioSPI::end() {

@@ -22,12 +22,13 @@
 
 #include <Arduino.h>
 #include <hardware/pio.h>
+#include <api/HardwareSPI.h>
 #include <hardware/spi.h>
 extern "C" {
 #include "pio_spi.h"
 }
 
-class PioSPI {
+class PioSPI : public SPIClass {
 public:
     PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , bool cpha, bool cpol, uint32_t frequency);
 
@@ -42,8 +43,15 @@ public:
     void transfer(void *txbuf, void *rxbuf, size_t count);
 
     // Call before/after every complete transaction
-    void beginTransaction(void);
+    void beginTransaction(SPISettings settings);
     void endTransaction(void);
+
+    //Not implemented ...
+    void usingInterrupt(int interruptNumber){};
+    void notUsingInterrupt(int interruptNumber){};
+    void attachInterrupt(){};
+    void detachInterrupt(){};
+
 
     // Assign pins, call before begin()
     bool setRX(pin_size_t pin);
