@@ -69,7 +69,7 @@ private:
     bool _initted; // Transaction begun
     BitOrder _BITORDER ;
     bool _CPHA, _CPOL ;
-    uint32_t _clkdiv ;
+    float _clkdiv ;
     
 };
 

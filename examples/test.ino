@@ -1,10 +1,7 @@
 #include "PioSPI.h" // necessary library
-
-
-unsigned char test_data [] = {0, 1, 2, 3, 4, 5, 6};
+unsigned char test_data [7] ;
 unsigned char rx_buffer [7] ;
-
-PioSPI spiBus(18, 21, 19, 5, 0, 0, 1000000);
+PioSPI spiBus(18, 19, 5, 22, 0, 0, 20000000); //MOSI, MISO, SCK, CS, CPHA, CPOL, FREQUENCY
 
 void setup()
 {
@@ -12,26 +9,25 @@ void setup()
   spiBus.begin(); // wake up the SPI bus.
 }
 
-void testLoopBack(int value)
-{
-
-  spiBus.beginTransaction();
-  spiBus.transfer(0); // send command byte
-  spiBus.transfer(value); // send value (0~255)
-  spiBus.endTransaction();
-}
-
 void loop()
-{
+{ 
+  for(int i = 0; i <  sizeof(test_data) ; i ++){
+    test_data[i] = random(0, 256);
+  }
+  spiBus.beginTransaction();
   spiBus.transfer(test_data, rx_buffer, sizeof(test_data));
+  spiBus.endTransaction();
   for(int i = 0; i <  sizeof(test_data) ; i ++){
     if(rx_buffer[i] != test_data[i]){
       Serial.print("Error at byte : ");
       Serial.print(i);
-      Serial.println(" !");
-      break ;
+      Serial.print(" : ");
+      Serial.print(test_data[i]);
+      Serial.print(" != ");
+      Serial.print(rx_buffer[i]);
+      Serial.println("  ");
     }
   }
-  Serial.print("Test succeeded ! ");
-  delay(100);
+  Serial.println("Test Done ");
+  delay(1000);
 }
