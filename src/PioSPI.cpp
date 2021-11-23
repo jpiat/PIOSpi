@@ -25,7 +25,7 @@
 
 
 
-PioSPI::PioSPI(pin_size_t rx, pin_size_t cs, pin_size_t sck, pin_size_t tx, bool cpha, bool cpol, uint32_t frequency) {
+PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , bool cpha, bool cpol, uint32_t frequency) {
     _spi = {
             .pio = pio1,
             .sm = 0
@@ -36,7 +36,7 @@ PioSPI::PioSPI(pin_size_t rx, pin_size_t cs, pin_size_t sck, pin_size_t tx, bool
     _CS = cs ;
     _CPHA = cpha ;
     _CPOL = cpol ;
-    _BITORDER = LSBFIRST ;
+    _BITORDER = MSBFIRST ;
     uint32_t system_clock_frequency = clock_get_hz(clk_sys);
     _clkdiv = ((float) system_clock_frequency)/(frequency * 4);  // 25MHz
     _initted = false ;
@@ -129,7 +129,7 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
     // MSB version is easy!
     if (_BITORDER == MSBFIRST) {
         if (rxbuf == NULL) { // transmit only!
-            pio_spi_write8_blocking(&_spi,  (uint8_t *) txbuf, count);
+            pio_spi_write8_blocking(&_spi,  (uint8_t *) txbuff, count);
             return;
         }
         if (txbuf == NULL) { // receive only!
@@ -137,7 +137,7 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
             return;
         }
         // transmit and receive!
-        pio_spi_write8_read8_blocking(&_spi,  (uint8_t *) &txbuf,  (uint8_t *) &rxbuf, count);
+        pio_spi_write8_read8_blocking(&_spi,  (uint8_t *) txbuff,  (uint8_t *) rxbuff, count);
         return;
     }
 

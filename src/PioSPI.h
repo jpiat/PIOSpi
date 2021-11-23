@@ -29,7 +29,7 @@ extern "C" {
 
 class PioSPI {
 public:
-    PioSPI(pin_size_t rx, pin_size_t cs, pin_size_t sck, pin_size_t tx, bool cpha, bool cpol, uint32_t frequency);
+    PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , bool cpha, bool cpol, uint32_t frequency);
 
     // Send or receive 8- or 16-bit data.  Returns read back value
     byte transfer(uint8_t data) ;
