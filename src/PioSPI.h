@@ -30,7 +30,7 @@ extern "C" {
 
 class PioSPI : public SPIClass {
 public:
-    PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , bool cpha, bool cpol, uint32_t frequency);
+    PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs ,uint8_t data_mode, uint32_t frequency);
 
     // Send or receive 8- or 16-bit data.  Returns read back value
     byte transfer(uint8_t data) ;
@@ -76,7 +76,8 @@ private:
     bool _running; // SPI port active
     bool _initted; // Transaction begun
     BitOrder _BITORDER ;
-    bool _CPHA, _CPOL ;
+    uint8_t _DATA_MODE ;
+    uint32_t _CK_FREQ ;
     float _clkdiv ;
     
 };

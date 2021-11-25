@@ -23,9 +23,16 @@
 #include <hardware/pio.h>
 #include "hardware/clocks.h"
 
+#if defined(DEBUG_RP2040_PIOSPI)
+#define DEBUGPIOSPI(fmt, ...) do { Serial.printf(fmt, ## __VA_ARGS__); DEBUG_RP2040_PORT.flush();} while (0)
+#else
+#define DEBUGPIOSPI(...) do { } while(0)
+#endif
 
 
-PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , bool cpha, bool cpol, uint32_t frequency) {
+
+
+PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , uint8_t data_mode, uint32_t frequency) {
     _spi = {
             .pio = pio1,
             .sm = 0
@@ -34,20 +41,20 @@ PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , boo
     _TX = tx ;
     _SCK = sck ;
     _CS = cs ;
-    _CPHA = cpha ;
-    _CPOL = cpol ;
     _BITORDER = MSBFIRST ;
+    _DATA_MODE = data_mode;
     uint32_t system_clock_frequency = clock_get_hz(clk_sys);
-    _clkdiv = ((float) system_clock_frequency)/(frequency * 4);  // 25MHz
+    _CK_FREQ = frequency ;
+    _clkdiv = ((float) system_clock_frequency)/(_CK_FREQ * 4);  // 25MHz
     _initted = false ;
 }
 
 inline bool PioSPI::cpol() {
-    return _CPOL;
+    return (_DATA_MODE == SPI_MODE2) || (_DATA_MODE == SPI_MODE3);
 }
 
 inline bool PioSPI::cpha() {
-    return _CPHA ;
+    return (_DATA_MODE == SPI_MODE1) || (_DATA_MODE == SPI_MODE3) ;
 }
 
 inline uint8_t PioSPI::reverseByte(uint8_t b) {
@@ -86,10 +93,10 @@ byte PioSPI::transfer(uint8_t data) {
         return 0;
     }
     data = (_BITORDER == MSBFIRST) ? data : reverseByte(data);
-    DEBUGSPI("SPI::transfer(%02x), cpol=%d, cpha=%d\n", data, cpol(), cpha());
+    DEBUGPIOSPI("SPI::transfer(%02x), cpol=%d, cpha=%d\n", data, cpol(), cpha());
     pio_spi_write8_read8_blocking(&_spi, (uint8_t *) &data,(uint8_t *) &ret, 1);
     ret = (_BITORDER == MSBFIRST) ? ret : reverseByte(ret);
-    DEBUGSPI("SPI: read back %02x\n", ret);
+    DEBUGPIOSPI("SPI: read back %02x\n", ret);
     return ret;
 }
 
@@ -99,22 +106,22 @@ uint16_t PioSPI::transfer16(uint16_t data) {
         return 0;
     }
     data = (_BITORDER == MSBFIRST) ? data : reverse16Bit(data);
-    DEBUGSPI("SPI::transfer16(%04x), cpol=%d, cpha=%d\n", data, cpol(), cpha());
+    DEBUGPIOSPI("SPI::transfer16(%04x), cpol=%d, cpha=%d\n", data, cpol(), cpha());
     pio_spi_write8_read8_blocking(&_spi, (uint8_t *) &data, (uint8_t *) &ret, 2);
     ret = (_BITORDER == MSBFIRST) ? ret : reverseByte(ret);
-    DEBUGSPI("SPI: read back %02x\n", ret);
+    DEBUGPIOSPI("SPI: read back %02x\n", ret);
     return ret;
 }
 
 void PioSPI::transfer(void *buf, size_t count) {
-    DEBUGSPI("SPI::transfer(%p, %d)\n", buf, count);
+    DEBUGPIOSPI("SPI::transfer(%p, %d)\n", buf, count);
     uint8_t *buff = reinterpret_cast<uint8_t *>(buf);
     for (size_t i = 0; i < count; i++) {
         *buff = transfer(*buff);
         *buff = (_BITORDER == MSBFIRST) ? *buff : reverseByte(*buff);
         buff++;
     }
-    DEBUGSPI("SPI::transfer completed\n");
+    DEBUGPIOSPI("SPI::transfer completed\n");
 }
 
 void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
@@ -122,7 +129,7 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
         return;
     }
 
-    DEBUGSPI("SPI::transfer(%p, %p, %d)\n", txbuf, rxbuf, count);
+    DEBUGPIOSPI("SPI::transfer(%p, %p, %d)\n", txbuf, rxbuf, count);
     uint8_t *txbuff = reinterpret_cast<uint8_t *>(txbuf);
     uint8_t *rxbuff = reinterpret_cast<uint8_t *>(rxbuf);
 
@@ -148,27 +155,29 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
         txbuff++;
         rxbuff++;
     }
-    DEBUGSPI("SPI::transfer completed\n");
+    DEBUGPIOSPI("SPI::transfer completed\n");
 }
 
 void PioSPI::beginTransaction(SPISettings settings) {
+    if(_initted && (settings.getClockFreq() != _CK_FREQ || settings.getDataMode() != _DATA_MODE)){
+        pio_sm_set_enabled(_spi.pio, _spi.sm, false);
+        pio_sm_unclaim(_spi.pio, _spi.sm);
+        _initted = false ;
+    }
     if(!_initted){
         uint32_t system_clock_frequency = clock_get_hz(clk_sys);
         _clkdiv = ((float) system_clock_frequency)/((float) settings.getClockFreq() * 4);  // 25MHz
-        _BITORDER = settings.getBitOrder() ;
-        _CPHA = (settings.getDataMode() == SPI_MODE1) || (settings.getDataMode() == SPI_MODE3);
-        _CPOL = (settings.getDataMode() == SPI_MODE2) || (settings.getDataMode() == SPI_MODE3);
-        uint cpha = _CPHA ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
-        gpio_init(_CS);
-        gpio_put(_CS, 1);
-        gpio_set_dir(_CS, GPIO_OUT);
+        _BITORDER = settings.getBitOrder();
+        _DATA_MODE = settings.getDataMode();
+        _CK_FREQ = settings.getClockFreq() ;
+        uint offset = cpha() ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
         pio_spi_init(_spi.pio, 
                     _spi.sm,
-                    cpha ,
+                    offset ,
                     8,       // 8 bits per SPI frame
                     _clkdiv,
-                    cpha,
-                    _CPOL,
+                    cpha(),
+                    cpol(),
                     _SCK,
                     _TX,
                     _RX);
@@ -224,8 +233,8 @@ bool PioSPI::setTX(pin_size_t pin) {
 
 void PioSPI::begin() {
     gpio_init(_CS);
-    gpio_put(_CS, 1);
     gpio_set_dir(_CS, GPIO_OUT);
+    gpio_put(_CS, 1);
 }
 
 void PioSPI::end() {
