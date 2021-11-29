@@ -71,14 +71,16 @@ private:
     void adjustBuffer(const void *s, void *d, size_t cnt, bool by16);
 
     pio_spi_inst_t _spi;
-    pin_size_t _RX, _TX, _SCK, _CS;
-    bool _hwCS;
+    pin_size_t _rx, _tx, _sck, _cs;
     bool _running; // SPI port active
+    bool _beginned ;
     bool _initted; // Transaction begun
     BitOrder _BITORDER ;
-    uint8_t _DATA_MODE ;
-    uint32_t _CK_FREQ ;
+    uint8_t _data_mode ;
+    uint32_t _ck_freq ;
     float _clkdiv ;
+    PIOProgram _cpha0Pgm ;
+    PIOProgram _cpha1Pgm ;
     
 };
 

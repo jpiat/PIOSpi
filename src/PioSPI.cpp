@@ -31,30 +31,29 @@
 
 
 
-
-PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , uint8_t data_mode, uint32_t frequency) {
-    _spi = {
-            .pio = pio1,
-            .sm = 0
-    };
-    _RX = rx ;
-    _TX = tx ;
-    _SCK = sck ;
-    _CS = cs ;
+PioSPI::PioSPI(pin_size_t tx, pin_size_t rx, pin_size_t sck, pin_size_t cs , uint8_t data_mode, uint32_t frequency)
+:_cpha0Pgm(&spi_cpha0_program),
+_cpha1Pgm(&spi_cpha1_program) {
+    _rx = rx ;
+    _tx = tx ;
+    _sck = sck ;
+    _cs = cs ;
     _BITORDER = MSBFIRST ;
-    _DATA_MODE = data_mode;
+    _data_mode = data_mode;
     uint32_t system_clock_frequency = clock_get_hz(clk_sys);
-    _CK_FREQ = frequency ;
-    _clkdiv = ((float) system_clock_frequency)/(_CK_FREQ * 4);  // 25MHz
+    _ck_freq = frequency ;
+    _clkdiv = ((float) system_clock_frequency)/(_ck_freq * 4);  // 25MHz
     _initted = false ;
+    _running = false ;
+    _beginned = false ;
 }
 
 inline bool PioSPI::cpol() {
-    return (_DATA_MODE == SPI_MODE2) || (_DATA_MODE == SPI_MODE3);
+    return (_data_mode == SPI_MODE2) || (_data_mode == SPI_MODE3);
 }
 
 inline bool PioSPI::cpha() {
-    return (_DATA_MODE == SPI_MODE1) || (_DATA_MODE == SPI_MODE3) ;
+    return (_data_mode == SPI_MODE1) || (_data_mode == SPI_MODE3) ;
 }
 
 inline uint8_t PioSPI::reverseByte(uint8_t b) {
@@ -159,18 +158,32 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
 }
 
 void PioSPI::beginTransaction(SPISettings settings) {
-    if(_initted && (settings.getClockFreq() != _CK_FREQ || settings.getDataMode() != _DATA_MODE)){
+    if(!_beginned){
+        begin();
+    }
+    if(_initted && (settings.getClockFreq() != _ck_freq || settings.getDataMode() != _data_mode)){
         pio_sm_set_enabled(_spi.pio, _spi.sm, false);
         pio_sm_unclaim(_spi.pio, _spi.sm);
         _initted = false ;
     }
     if(!_initted){
+        int offset ;
+        if(cpha()){
+            if (!_cpha1Pgm.prepare(&_spi.pio,(int *)  &_spi.sm, &offset)) {
+                return ; //Need to indicate failure somehow
+            }
+        }else{
+            if (!_cpha0Pgm.prepare(&_spi.pio,(int *) &_spi.sm, &offset)) {
+                return ; //Need to indicate failure somehow
+            }
+        }
+        
         uint32_t system_clock_frequency = clock_get_hz(clk_sys);
         _clkdiv = ((float) system_clock_frequency)/((float) settings.getClockFreq() * 4);  // 25MHz
         _BITORDER = settings.getBitOrder();
-        _DATA_MODE = settings.getDataMode();
-        _CK_FREQ = settings.getClockFreq() ;
-        uint offset = cpha() ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
+        _data_mode = settings.getDataMode();
+        _ck_freq = settings.getClockFreq() ;
+        //uint offset = cpha() ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
         pio_spi_init(_spi.pio, 
                     _spi.sm,
                     offset ,
@@ -178,26 +191,26 @@ void PioSPI::beginTransaction(SPISettings settings) {
                     _clkdiv,
                     cpha(),
                     cpol(),
-                    _SCK,
-                    _TX,
-                    _RX);
-        _running = true ;
+                    _sck,
+                    _tx,
+                    _rx);
+        
         _initted = true ;
     }
-    //TODO: take settings into account
-    
-    //TODO: take mode into account
-    //TODO: take clk into account
-    gpio_put(_CS, 0);
+    gpio_put(_cs, 0);
+    _running = true ;
 }
 
 void PioSPI::endTransaction(void) {
-    gpio_put(_CS, 1);
+    if(_running){
+        gpio_put(_cs, 1);
+        _running = false ;
+    }
 }
 
 bool PioSPI::setRX(pin_size_t pin) {
-    if (!_running) {
-        _RX = pin;
+    if(!_running && !_initted){
+        _rx = pin;
         return true;
     }
 
@@ -205,8 +218,8 @@ bool PioSPI::setRX(pin_size_t pin) {
 }
 
 bool PioSPI::setCS(pin_size_t pin) {
-    if (!_running) {
-        _CS = pin;
+    if(!_running && !_initted){
+        _cs = pin;
         return true;
     }
 
@@ -214,8 +227,8 @@ bool PioSPI::setCS(pin_size_t pin) {
 }
 
 bool PioSPI::setSCK(pin_size_t pin) {
-    if (!_running) {
-        _SCK = pin;
+    if(!_running && !_initted){
+        _sck = pin;
         return true;
     }
 
@@ -223,23 +236,26 @@ bool PioSPI::setSCK(pin_size_t pin) {
 }
 
 bool PioSPI::setTX(pin_size_t pin) {
-   if (!_running) {
-        _TX= pin;
+   if (!_running && !_initted ) {
+        _tx= pin;
         return true;
     }
-
     return false;
 }
 
 void PioSPI::begin() {
-    gpio_init(_CS);
-    gpio_set_dir(_CS, GPIO_OUT);
-    gpio_put(_CS, 1);
+    gpio_init(_cs);
+    gpio_set_dir(_cs, GPIO_OUT);
+    gpio_put(_cs, 1);
+    _beginned = true ;
 }
 
 void PioSPI::end() {
     pio_sm_set_enabled(_spi.pio, _spi.sm, false);
     pio_sm_unclaim(_spi.pio, _spi.sm);
+    _beginned = false ;
+    _initted = false ;
+    _running = false ;
 }
 
 
