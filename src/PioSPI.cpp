@@ -1,7 +1,7 @@
 /*
-    SPI Master library for the Raspberry Pi Pico RP2040
+    PioSPI Master library for the Raspberry Pi Pico RP2040
 
-    Copyright (c) 2021 Earle F. Philhower, III <earlephilhower@yahoo.com>
+    Copyright (c) 2021 Jonathan Piat <piat.jonathan@gmail.com>
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -73,7 +73,6 @@ inline uint16_t PioSPI::reverse16Bit(uint16_t w) {
     return (reverseByte(w & 0xff) << 8) | (reverseByte(w >> 8));
 }
 
-// The HW can't do LSB first, only MSB first, so need to bitreverse
 void PioSPI::adjustBuffer(const void *s, void *d, size_t cnt, bool by16) {
     if (_BITORDER == MSBFIRST) {
         memcpy(d, s, cnt * (by16 ? 2 : 1));
@@ -138,22 +137,19 @@ void PioSPI::transfer(void *txbuf, void *rxbuf, size_t count) {
     uint8_t *txbuff = reinterpret_cast<uint8_t *>(txbuf);
     uint8_t *rxbuff = reinterpret_cast<uint8_t *>(rxbuf);
 
-    // MSB version is easy!
     if (_BITORDER == MSBFIRST) {
-        if (rxbuf == NULL) { // transmit only!
+        if (rxbuf == NULL) { 
             pio_spi_write8_blocking(&_spi,  (uint8_t *) txbuff, count);
             return;
         }
-        if (txbuf == NULL) { // receive only!
+        if (txbuf == NULL) {
             pio_spi_read8_blocking(&_spi,  (uint8_t *) rxbuff, count);
             return;
         }
-        // transmit and receive!
         pio_spi_write8_read8_blocking(&_spi,  (uint8_t *) txbuff,  (uint8_t *) rxbuff, count);
         return;
     }
 
-    // If its LSB this isn't nearly as fun, we'll just let transfer(x) do it :(
     for (size_t i = 0; i < count; i++) {
         *rxbuff = transfer(*txbuff);
         *rxbuff = (_BITORDER == MSBFIRST) ? *rxbuff : reverseByte(*rxbuff);

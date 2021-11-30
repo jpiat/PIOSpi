@@ -1,12 +1,12 @@
 #######################################
-# Syntax Coloring Map Servo
+# Syntax Coloring Map PioSPI
 #######################################
 
 #######################################
 # Datatypes (KEYWORD1)
 #######################################
 
-PioSpi	KEYWORD1	PioSpi
+PioSPI	KEYWORD1	PioSPI
 
 #######################################
 # Methods and Functions (KEYWORD2)
