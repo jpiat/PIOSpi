@@ -24,10 +24,11 @@
 #include "hardware/clocks.h"
 
 #if defined(DEBUG_RP2040_PIOSPI)
-#define DEBUGPIOSPI(fmt, ...) do { Serial.printf(fmt, ## __VA_ARGS__); DEBUG_RP2040_PORT.flush();} while (0)
+#define DEBUGPIOSPI(fmt, ...) do { Serial.printf(fmt, ## __VA_ARGS__); Serial.flush();} while (0)
 #else
 #define DEBUGPIOSPI(...) do { } while(0)
 #endif
+#define ERRORPIOSPI(fmt, ...) do { Serial.printf(fmt, ## __VA_ARGS__); Serial.flush();} while (0)
 
 
 
@@ -42,7 +43,12 @@ _cpha1Pgm(&spi_cpha1_program) {
     _data_mode = data_mode;
     uint32_t system_clock_frequency = clock_get_hz(clk_sys);
     _ck_freq = frequency ;
-    _clkdiv = ((float) system_clock_frequency)/(_ck_freq * 4);  // 25MHz
+    _clkdiv = ((float) system_clock_frequency)/(_ck_freq * 4);
+    if(_clkdiv < 1.5){
+        _clkdiv = 1.5 ;
+        _ck_freq = (((float) system_clock_frequency)/_clkdiv)/4.f ;
+        ERRORPIOSPI("Set frequency too high, falling back to maximum %u Hz \n", _ck_freq);
+    }
     _initted = false ;
     _running = false ;
     _beginned = false ;
@@ -179,10 +185,15 @@ void PioSPI::beginTransaction(SPISettings settings) {
         }
         
         uint32_t system_clock_frequency = clock_get_hz(clk_sys);
-        _clkdiv = ((float) system_clock_frequency)/((float) settings.getClockFreq() * 4);  // 25MHz
+        _ck_freq = settings.getClockFreq() ;
+        _clkdiv = ((float) system_clock_frequency)/((float) _ck_freq * 4);
+        if(_clkdiv < 1.5){
+            _clkdiv = 1.5 ;
+            _ck_freq = (((float) system_clock_frequency)/_clkdiv)/4.f ;
+            ERRORPIOSPI("Set frequency too high, falling back to maximum %u Hz \n", _ck_freq);
+        }
         _BITORDER = settings.getBitOrder();
         _data_mode = settings.getDataMode();
-        _ck_freq = settings.getClockFreq() ;
         //uint offset = cpha() ? pio_add_program(_spi.pio, &spi_cpha1_program) : pio_add_program(_spi.pio, &spi_cpha0_program) ;
         pio_spi_init(_spi.pio, 
                     _spi.sm,
