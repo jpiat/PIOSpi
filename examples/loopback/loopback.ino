@@ -1,7 +1,9 @@
 #include "PioSPI.h" // necessary library
+
 unsigned char test_data [7] ;
 unsigned char rx_buffer [7] ;
-PioSPI spiBus(18, 19, 5, 22, SPI_MODE0, 25000000); //MOSI, MISO, SCK, CS, CPHA, CPOL, FREQUENCY
+
+PioSPI spiBus(18, 19, 5, 22, SPI_MODE0, 20000000); //MOSI, MISO, SCK, CS, CPHA, CPOL, FREQUENCY
 
 void setup()
 {
@@ -14,7 +16,7 @@ void loop()
   for(int i = 0; i <  sizeof(test_data) ; i ++){
     test_data[i] = random(0, 256);
   }
-  spiBus.beginTransaction(SPISettings(25000000, MSBFIRST, SPI_MODE0));
+  spiBus.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
   spiBus.transfer(test_data, rx_buffer, sizeof(test_data));
   spiBus.endTransaction();
   for(int i = 0; i <  sizeof(test_data) ; i ++){
